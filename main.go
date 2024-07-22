@@ -1,9 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func startServer() {
 		w.Write([]byte("OK"))
 	}
 
-	readinessDir := "/healthz"
+	readinessDir := "GET /api/healthz"
 	mux.HandleFunc(readinessDir, healthzHandler)
 
 	filepathRoot := "/app/"
@@ -32,8 +32,8 @@ func startServer() {
 	handler := http.StripPrefix(filepathRoot, apiCfg.middlewareMetricsInc(fileserver))
 	mux.Handle(filepathRoot, handler)
 
-	mux.Handle("/metrics", http.HandlerFunc(apiCfg.metrics))
-	mux.Handle("/reset", http.HandlerFunc(apiCfg.reset))
+	mux.HandleFunc("GET /admin/metrics", http.HandlerFunc(apiCfg.writeHit))
+	mux.Handle("/api/reset", http.HandlerFunc(apiCfg.reset))
 
 	srv := &http.Server{
 		Addr:    ":" + port,
@@ -50,15 +50,21 @@ type apiConfig struct {
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cfg.fileserverHits++
+		cfg.fileserverHits += 1
 		next.ServeHTTP(w, r)
 	})
 }
 
-func (cfg *apiConfig) metrics(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+func (cfg *apiConfig) writeHit(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Hits: " + strconv.Itoa(cfg.fileserverHits)))
+	w.Write([]byte(fmt.Sprintf(`
+        <html>
+        <body>
+        <h1>Welcome, Chirpy Admin</h1>
+        <p>Chirpy has been visited %d times!</p>
+        </body>
+        </html>`, cfg.fileserverHits)))
 }
 
 func (cfg *apiConfig) reset(w http.ResponseWriter, r *http.Request) {

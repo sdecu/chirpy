@@ -3,11 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sdecu/internal/database"
 	"log"
 	"net/http"
 	"strings"
 )
 
+var chirpId *int
+
+func init() {
+	*chirpId = 0
+}
 func main() {
 	startServer()
 }
@@ -38,7 +44,7 @@ func startServer() {
 	mux.Handle("/api/reset", http.HandlerFunc(apiCfg.reset))
 
 	//json handler
-	mux.HandleFunc("POST /api/validate_chirp", handleValidateChirp)
+	mux.HandleFunc("POST /api/chirps", handleCreateChirp)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
@@ -105,12 +111,9 @@ func cleanString(message string) string {
 	return clean
 }
 
-func handleValidateChirp(w http.ResponseWriter, r *http.Request) {
+func handleCreateChirp(w http.ResponseWriter, r *http.Request, db *DB) {
 	type parameters struct {
 		Body string `json:"body"`
-	}
-	type returnVals struct {
-		CleanedBody string `json:"cleaned_body"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -127,8 +130,11 @@ func handleValidateChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cleaned := cleanString(params.Body)
-	respondWithJSON(w, http.StatusOK, returnVals{
-		CleanedBody: cleaned,
-	})
+	newChirp, err := db.CreateChirp(params.Body)
+	if err != nil {
+		respondWithError(w, "Couldn't create chirp", http.StatusInternalServerError)
+		return
+	}
+
+	respondWithJSON(w, http.StatusCreated, newChirp)
 }

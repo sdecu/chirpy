@@ -3,17 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/sdecu/internal/database"
+	"github.com/sdecu/chirpy/internal/database"
 	"log"
 	"net/http"
 	"strings"
 )
 
-var chirpId *int
-
-func init() {
-	*chirpId = 0
-}
 func main() {
 	startServer()
 }
@@ -21,8 +16,14 @@ func main() {
 func startServer() {
 	port := "8080"
 	mux := http.NewServeMux()
+	db, err := database.NewDB("./database.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	apiCfg := &apiConfig{
 		fileserverHits: 0,
+		DB:             db,
 	}
 
 	healthzHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +45,10 @@ func startServer() {
 	mux.Handle("/api/reset", http.HandlerFunc(apiCfg.reset))
 
 	//json handler
-	mux.HandleFunc("POST /api/chirps", handleCreateChirp)
+	mux.HandleFunc("POST /api/chirps", func(w http.ResponseWriter, r *http.Request) {
+		handleCreateChirp(w, r, db)
+	})
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerChirpsRetrieve)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
@@ -57,6 +61,7 @@ func startServer() {
 
 type apiConfig struct {
 	fileserverHits int
+	DB             *database.DB
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -111,7 +116,7 @@ func cleanString(message string) string {
 	return clean
 }
 
-func handleCreateChirp(w http.ResponseWriter, r *http.Request, db *DB) {
+func handleCreateChirp(w http.ResponseWriter, r *http.Request, db *database.DB) {
 	type parameters struct {
 		Body string `json:"body"`
 	}
